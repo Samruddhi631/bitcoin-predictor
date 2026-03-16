@@ -1,0 +1,29 @@
+{
+  "R2": 0.0076,
+  "MAE": 0.0312,
+  "saved_at": "20260315_1457",
+  "features_used": [
+    "Volume_Ratio",
+    "RSI_14",
+    "MACD_Hist",
+    "BB_Width",
+    "BB_Position",
+    "FearGreed",
+    "FearGreed_Change",
+    "FearGreed_MA7",
+    "Sentiment_Zone",
+    "GoogleTrends",
+    "Trends_Change",
+    "SP500",
+    "Days_To_Halving",
+    "Halving_Cycle_Pct",
+    "Post_Halving_180",
+    "Price_Change",
+    "Volatility",
+    "Quarter",
+    "Is_Weekend"
+  ],
+  "feature_count": 19,
+  "train_rows": 2627,
+  "test_rows": 657
+}

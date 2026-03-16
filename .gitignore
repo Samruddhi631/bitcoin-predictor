@@ -1,0 +1,31 @@
+# Virtual environment
+venv/
+env/
+.venv/
+api/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+dist/
+build/
+
+# Large model files (if over 50MB)
+# api/models/rf_price_model.pkl
+# api/models/rf_direction_model.pkl
