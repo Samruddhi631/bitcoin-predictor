@@ -8,24 +8,35 @@ from datetime import datetime
 
 predict_bp = Blueprint('predict', __name__)
 
-# ── Feature builder ───────────────────────────────
 def build_features(btc, sp500, fg):
     df = btc.copy()
-    df['Date'] = pd.to_datetime(df['Date'])
+    # ✅ FIX: normalize dates to remove time component
+    df['Date'] = pd.to_datetime(df['Date']).dt.normalize()
 
     if sp500 is not None:
-        sp500['Date'] = pd.to_datetime(sp500['Date'])
+        sp500 = sp500.copy()
+        sp500['Date'] = pd.to_datetime(
+            sp500['Date']).dt.normalize()
         df = df.merge(sp500, on='Date', how='left')
         df['SP500'] = df['SP500'].ffill().bfill()
     else:
         df['SP500'] = 4000.0
 
     if fg is not None:
-        fg['Date'] = pd.to_datetime(fg['Date'])
+        fg = fg.copy()
+        fg['Date'] = pd.to_datetime(
+            fg['Date']).dt.normalize()
         df = df.merge(fg, on='Date', how='left')
         df['FearGreed'] = df['FearGreed'].ffill().bfill()
     else:
         df['FearGreed'] = 50.0
+
+    # Fill any remaining NaN in FearGreed
+    df['FearGreed'] = df['FearGreed'].fillna(50.0)
+    df['SP500']     = df['SP500'].fillna(
+                          df['SP500'].mean()
+                          if df['SP500'].notna().any()
+                          else 4000.0)
 
     df['GoogleTrends'] = 50.0
     df['MA7']          = df['BTC_Close'].rolling(7).mean()
@@ -107,11 +118,18 @@ def build_features(btc, sp500, fg):
     df['Day_of_Week'] = df['Date'].dt.dayofweek
     df['Month']       = df['Date'].dt.month
     df['Quarter']     = df['Date'].dt.quarter
-    df['Is_Weekend']  = (df['Day_of_Week'] >= 5).astype(int)
+    df['Is_Weekend']  = (df['Day_of_Week'] >= 5
+                         ).astype(int)
 
-    return df.dropna().reset_index(drop=True)
+    # ✅ FIX: use subset dropna — only drop rows where
+    # core price columns are missing, not ALL columns
+    core_cols = ['BTC_Close', 'RSI_14', 'MACD',
+                 'BB_Width', 'Volume_Ratio']
+    df = df.dropna(subset=core_cols).reset_index(drop=True)
 
-# ── Data fetchers ─────────────────────────────────
+    print(f"build_features returning {len(df)} rows")
+    return df
+
 def fetch_btc():
     btc = yf.download('BTC-USD', period='90d',
                        interval='1d', progress=False,
@@ -119,22 +137,28 @@ def fetch_btc():
     btc.columns = btc.columns.get_level_values(0)
     btc = btc[['Close','Volume']].copy()
     btc.columns = ['BTC_Close','Volume']
-    btc.index = pd.to_datetime(btc.index).tz_localize(None)
+    # ✅ normalize dates
+    btc.index = pd.to_datetime(
+        btc.index).tz_localize(None).normalize()
     btc = btc.reset_index()
     btc.columns = ['Date','BTC_Close','Volume']
+    print(f"BTC rows: {len(btc)}, "
+          f"last date: {btc['Date'].iloc[-1]}")
     return btc
 
 def fetch_sp500():
-    # ✅ FIXED: removed duplicate code, using 90d
     sp = yf.download('^GSPC', period='90d',
                       interval='1d', progress=False,
                       auto_adjust=True)
     sp.columns = sp.columns.get_level_values(0)
     sp = sp[['Close']].copy()
     sp.columns = ['SP500']
-    sp.index = pd.to_datetime(sp.index).tz_localize(None)
+    # ✅ normalize dates
+    sp.index = pd.to_datetime(
+        sp.index).tz_localize(None).normalize()
     sp = sp.reset_index()
     sp.columns = ['Date','SP500']
+    print(f"SP500 rows: {len(sp)}")
     return sp
 
 def fetch_fear_greed():
@@ -146,9 +170,12 @@ def fetch_fear_greed():
         fg['timestamp'].astype(int), unit='s'
     ).dt.normalize()
     fg['FearGreed'] = fg['value'].astype(float)
-    return fg[['Date','FearGreed']].sort_values('Date')
+    fg = fg[['Date','FearGreed']].sort_values(
+        'Date').reset_index(drop=True)
+    print(f"FearGreed rows: {len(fg)}, "
+          f"last date: {fg['Date'].iloc[-1]}")
+    return fg
 
-# ── /api/predict endpoint ─────────────────────────
 @predict_bp.route('/api/predict')
 def predict():
     try:
@@ -157,13 +184,13 @@ def predict():
         features = config['features']
         thresh   = config['optimal_threshold']
 
-        # Fetch & build features
+        # Fetch data
         btc = fetch_btc()
         sp  = fetch_sp500()
         fg  = fetch_fear_greed()
         df  = build_features(btc, sp, fg)
 
-        # ✅ Safety check
+        # Safety check
         if len(df) < 5:
             return jsonify({
                 'success' : False,
@@ -178,16 +205,12 @@ def predict():
                 'error'   : f'Missing features: {missing}'
             }), 500
 
-        print(f"✅ df shape: {df.shape}")
-        print(f"✅ Last date: {df['Date'].iloc[-1]}")
-
         # Get last row
         last      = df[features].iloc[[-1]]
         scaled    = models['scaler_X'].transform(last)
         cur_price = float(df['BTC_Close'].iloc[-1])
         cur_date  = str(df['Date'].iloc[-1])[:10]
 
-        # Return predictions
         ret_1d = float(models['scaler_y'].inverse_transform(
             models['xgb_return'].predict(
                 scaled).reshape(-1,1))[0][0])
@@ -198,29 +221,25 @@ def predict():
             models['xgb_7day'].predict(
                 scaled).reshape(-1,1))[0][0])
 
-        # Ensemble direction
         xgb_p = models['ensemble_xgb'].predict_proba(
                     scaled)[0][1]
         rf_p  = models['ensemble_rf'].predict_proba(
                     scaled)[0][1]
         prob  = (0.6 * xgb_p) + (0.4 * rf_p)
         direction  = 'UP' if prob >= thresh else 'DOWN'
-        confidence = prob if direction=='UP' else (1 - prob)
+        confidence = prob if direction=='UP' else (1-prob)
         conf_tier  = ('HIGH'   if confidence >= 0.62 else
                       'MEDIUM' if confidence >= 0.55 else
                       'LOW')
 
-        # Market regime
         ret_20 = (df['BTC_Close'].iloc[-1] /
                   df['BTC_Close'].iloc[-20] - 1)
         regime = ('Bull'     if ret_20 > 0.05 else
                   'Bear'     if ret_20 < -0.05 else
                   'Sideways')
 
-        # Fear & Greed latest
         fear_greed = int(fg['FearGreed'].iloc[-1])
 
-        # Price history for chart (last 30 days)
         history = df[['Date','BTC_Close']].tail(30).copy()
         history['Date'] = history['Date'].dt.strftime(
                               '%Y-%m-%d')
@@ -231,15 +250,15 @@ def predict():
             'current_price' : round(cur_price, 2),
             'predictions'   : {
                 'tomorrow' : {
-                    'price'  : round(cur_price*(1+ret_1d), 2),
+                    'price'  : round(cur_price*(1+ret_1d),2),
                     'return' : round(ret_1d * 100, 3),
                 },
                 '3day' : {
-                    'price'  : round(cur_price*(1+ret_3d), 2),
+                    'price'  : round(cur_price*(1+ret_3d),2),
                     'return' : round(ret_3d * 100, 3),
                 },
                 '7day' : {
-                    'price'  : round(cur_price*(1+ret_7d), 2),
+                    'price'  : round(cur_price*(1+ret_7d),2),
                     'return' : round(ret_7d * 100, 3),
                 },
             },
@@ -259,6 +278,8 @@ def predict():
         })
 
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({
             'success' : False,
             'error'   : str(e)
