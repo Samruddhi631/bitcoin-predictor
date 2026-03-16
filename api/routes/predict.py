@@ -8,7 +8,7 @@ from datetime import datetime
 
 predict_bp = Blueprint('predict', __name__)
 
-# ── Feature builder (same logic as Colab) ────────
+# ── Feature builder ───────────────────────────────
 def build_features(btc, sp500, fg):
     df = btc.copy()
     df['Date'] = pd.to_datetime(df['Date'])
@@ -28,8 +28,6 @@ def build_features(btc, sp500, fg):
         df['FearGreed'] = 50.0
 
     df['GoogleTrends'] = 50.0
-
-    # Technical
     df['MA7']          = df['BTC_Close'].rolling(7).mean()
     df['MA30']         = df['BTC_Close'].rolling(30).mean()
     df['Price_Change'] = df['BTC_Close'].pct_change()
@@ -38,56 +36,48 @@ def build_features(btc, sp500, fg):
     df['Lag2']         = df['BTC_Close'].shift(2)
     df['Lag3']         = df['BTC_Close'].shift(3)
 
-    # RSI
     delta = df['BTC_Close'].diff()
     gain  = delta.clip(lower=0).rolling(14).mean()
     loss  = (-delta.clip(upper=0)).rolling(14).mean()
     rs    = gain / loss.replace(0, np.nan)
     df['RSI_14'] = 100 - (100 / (1 + rs))
 
-    # MACD
-    ema12 = df['BTC_Close'].ewm(span=12,
-                                 adjust=False).mean()
-    ema26 = df['BTC_Close'].ewm(span=26,
-                                 adjust=False).mean()
+    ema12 = df['BTC_Close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['BTC_Close'].ewm(span=26, adjust=False).mean()
     df['MACD']        = ema12 - ema26
     df['MACD_Signal'] = df['MACD'].ewm(
                             span=9, adjust=False).mean()
     df['MACD_Hist']   = df['MACD'] - df['MACD_Signal']
 
-    # Bollinger Bands
     rm  = df['BTC_Close'].rolling(20).mean()
     rs2 = df['BTC_Close'].rolling(20).std()
     df['BB_Upper']    = rm + (2 * rs2)
     df['BB_Lower']    = rm - (2 * rs2)
-    df['BB_Width']    = ((df['BB_Upper'] -
-                          df['BB_Lower']) / rm)
+    df['BB_Width']    = (df['BB_Upper'] -
+                         df['BB_Lower']) / rm
     df['BB_Position'] = ((df['BTC_Close'] -
                           df['BB_Lower']) /
                          (df['BB_Upper'] -
                           df['BB_Lower'] + 1e-9))
 
-    # Volume
     df['Volume_MA7']   = df['Volume'].rolling(7).mean()
     df['Volume_Ratio'] = (df['Volume'] /
                           (df['Volume_MA7'] + 1e-9))
 
-    # Sentiment
     df['FearGreed_Change'] = df['FearGreed'].diff()
-    df['FearGreed_MA7']    = df['FearGreed'].rolling(
-                                 7).mean()
+    df['FearGreed_MA7']    = df['FearGreed'].rolling(7).mean()
+
     def sz(v):
         if v <= 25:   return 0
         elif v <= 45: return 1
         elif v <= 55: return 2
         elif v <= 75: return 3
         else:         return 4
+
     df['Sentiment_Zone'] = df['FearGreed'].apply(sz)
     df['Trends_Change']  = df['GoogleTrends'].diff()
-    df['Trends_MA7']     = df['GoogleTrends'].rolling(
-                               7).mean()
+    df['Trends_MA7']     = df['GoogleTrends'].rolling(7).mean()
 
-    # Halving
     halving_dates = [
         pd.Timestamp('2012-11-28'),
         pd.Timestamp('2016-07-09'),
@@ -114,18 +104,16 @@ def build_features(btc, sp500, fg):
     df['Post_Halving_180']   = (
         pd.Series(dsl_l) <= 180).astype(int).values
 
-    # Calendar
     df['Day_of_Week'] = df['Date'].dt.dayofweek
     df['Month']       = df['Date'].dt.month
     df['Quarter']     = df['Date'].dt.quarter
-    df['Is_Weekend']  = (df['Day_of_Week'] >= 5
-                         ).astype(int)
+    df['Is_Weekend']  = (df['Day_of_Week'] >= 5).astype(int)
 
     return df.dropna().reset_index(drop=True)
 
 # ── Data fetchers ─────────────────────────────────
 def fetch_btc():
-    btc = yf.download('BTC-USD', period='60d',
+    btc = yf.download('BTC-USD', period='90d',
                        interval='1d', progress=False,
                        auto_adjust=True)
     btc.columns = btc.columns.get_level_values(0)
@@ -137,7 +125,8 @@ def fetch_btc():
     return btc
 
 def fetch_sp500():
-    sp = yf.download('^GSPC', period='60d',
+    # ✅ FIXED: removed duplicate code, using 90d
+    sp = yf.download('^GSPC', period='90d',
                       interval='1d', progress=False,
                       auto_adjust=True)
     sp.columns = sp.columns.get_level_values(0)
@@ -149,7 +138,7 @@ def fetch_sp500():
     return sp
 
 def fetch_fear_greed():
-    url  = "https://api.alternative.me/fng/?limit=60"
+    url  = "https://api.alternative.me/fng/?limit=90"
     resp = requests.get(url, timeout=10)
     data = resp.json()['data']
     fg   = pd.DataFrame(data)
@@ -163,20 +152,38 @@ def fetch_fear_greed():
 @predict_bp.route('/api/predict')
 def predict():
     try:
-        models  = current_app.config['MODELS']
-        config  = current_app.config['CONFIG']
+        models   = current_app.config['MODELS']
+        config   = current_app.config['CONFIG']
         features = config['features']
         thresh   = config['optimal_threshold']
 
         # Fetch & build features
-        btc  = fetch_btc()
-        sp   = fetch_sp500()
-        fg   = fetch_fear_greed()
-        df   = build_features(btc, sp, fg)
+        btc = fetch_btc()
+        sp  = fetch_sp500()
+        fg  = fetch_fear_greed()
+        df  = build_features(btc, sp, fg)
+
+        # ✅ Safety check
+        if len(df) < 5:
+            return jsonify({
+                'success' : False,
+                'error'   : f'Not enough data: {len(df)} rows'
+            }), 500
+
+        missing = [f for f in features
+                   if f not in df.columns]
+        if missing:
+            return jsonify({
+                'success' : False,
+                'error'   : f'Missing features: {missing}'
+            }), 500
+
+        print(f"✅ df shape: {df.shape}")
+        print(f"✅ Last date: {df['Date'].iloc[-1]}")
 
         # Get last row
-        last     = df[features].iloc[[-1]]
-        scaled   = models['scaler_X'].transform(last)
+        last      = df[features].iloc[[-1]]
+        scaled    = models['scaler_X'].transform(last)
         cur_price = float(df['BTC_Close'].iloc[-1])
         cur_date  = str(df['Date'].iloc[-1])[:10]
 
@@ -224,15 +231,15 @@ def predict():
             'current_price' : round(cur_price, 2),
             'predictions'   : {
                 'tomorrow' : {
-                    'price'  : round(cur_price*(1+ret_1d),2),
+                    'price'  : round(cur_price*(1+ret_1d), 2),
                     'return' : round(ret_1d * 100, 3),
                 },
                 '3day' : {
-                    'price'  : round(cur_price*(1+ret_3d),2),
+                    'price'  : round(cur_price*(1+ret_3d), 2),
                     'return' : round(ret_3d * 100, 3),
                 },
                 '7day' : {
-                    'price'  : round(cur_price*(1+ret_7d),2),
+                    'price'  : round(cur_price*(1+ret_7d), 2),
                     'return' : round(ret_7d * 100, 3),
                 },
             },
