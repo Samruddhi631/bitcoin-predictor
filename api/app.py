@@ -6,6 +6,28 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Add to top of api/app.py
+import time
+
+# Simple in-memory cache
+_cache = {
+    'prediction': None,
+    'timestamp':  0,
+}
+CACHE_TTL = 3600  # 1 hour in seconds
+
+def get_cached_prediction():
+    now = time.time()
+    if (_cache['prediction'] is not None and
+            now - _cache['timestamp'] < CACHE_TTL):
+        print("✅ Returning cached prediction")
+        return _cache['prediction']
+    return None
+
+def set_cached_prediction(data):
+    _cache['prediction'] = data
+    _cache['timestamp']  = time.time()
+    print("✅ Prediction cached")
 load_dotenv()
 
 app = Flask(__name__)
@@ -82,7 +104,9 @@ def health():
         'models' : loaded,
         'config' : config is not None
     }
-
+@app.route('/api/warmup')
+def warmup():
+    return jsonify({'status': 'warm', 'ready': True})
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=True, port=port)

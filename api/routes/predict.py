@@ -5,9 +5,31 @@ import requests
 import yfinance as yf
 from flask import Blueprint, jsonify, current_app
 from datetime import datetime, timedelta
+import time
 
 predict_bp = Blueprint('predict', __name__)
 
+# ── Simple in-memory cache ────────────────────────
+_cache = {
+    'prediction': None,
+    'timestamp':  0,
+}
+CACHE_TTL = 3600  # 1 hour
+
+def get_cached():
+    now = time.time()
+    if (_cache['prediction'] is not None and
+            now - _cache['timestamp'] < CACHE_TTL):
+        print("✅ Returning cached prediction")
+        return _cache['prediction']
+    return None
+
+def set_cached(data):
+    _cache['prediction'] = data
+    _cache['timestamp']  = time.time()
+    print("✅ Prediction cached for 1 hour")
+
+# ── Feature builder ───────────────────────────────
 def build_features(btc, sp500, fg):
     df = btc.copy()
     df['Date'] = pd.to_datetime(df['Date']).dt.normalize()
@@ -30,8 +52,8 @@ def build_features(btc, sp500, fg):
     else:
         df['FearGreed'] = 50.0
 
-    df['FearGreed'] = df['FearGreed'].fillna(50.0)
-    df['SP500']     = df['SP500'].fillna(4000.0)
+    df['FearGreed']    = df['FearGreed'].fillna(50.0)
+    df['SP500']        = df['SP500'].fillna(4000.0)
     df['GoogleTrends'] = 50.0
 
     df['MA7']          = df['BTC_Close'].rolling(7).mean()
@@ -122,7 +144,7 @@ def build_features(btc, sp500, fg):
     print(f"build_features returning {len(df)} rows")
     return df
 
-# ✅ KEY FIX: use start/end dates instead of period
+# ── Data fetchers ─────────────────────────────────
 def fetch_btc():
     try:
         end   = datetime.now()
@@ -148,7 +170,6 @@ def fetch_btc():
         print(f"✅ BTC rows: {len(btc)}, "
               f"last: {btc['Date'].iloc[-1].date()}")
         return btc
-
     except Exception as e:
         print(f"❌ fetch_btc failed: {e}")
         raise
@@ -178,9 +199,8 @@ def fetch_sp500():
         sp.columns = ['Date','SP500']
         print(f"✅ SP500 rows: {len(sp)}")
         return sp
-
     except Exception as e:
-        print(f"⚠️ fetch_sp500 failed: {e} — using fallback")
+        print(f"⚠️ fetch_sp500 failed: {e} — fallback")
         return None
 
 def fetch_fear_greed():
@@ -202,19 +222,27 @@ def fetch_fear_greed():
         print(f"⚠️ fetch_fear_greed failed: {e}")
         return None
 
+# ── /api/predict endpoint ─────────────────────────
 @predict_bp.route('/api/predict')
 def predict():
     try:
+        # ✅ Return cached result if fresh
+        cached = get_cached()
+        if cached:
+            return jsonify(cached)
+
         models   = current_app.config['MODELS']
         config   = current_app.config['CONFIG']
         features = config['features']
         thresh   = config['optimal_threshold']
 
+        # Fetch data
         btc = fetch_btc()
         sp  = fetch_sp500()
         fg  = fetch_fear_greed()
         df  = build_features(btc, sp, fg)
 
+        # Safety checks
         if len(df) < 5:
             return jsonify({
                 'success' : False,
@@ -229,6 +257,7 @@ def predict():
                 'error'   : f'Missing features: {missing}'
             }), 500
 
+        # Predict
         last      = df[features].iloc[[-1]]
         scaled    = models['scaler_X'].transform(last)
         cur_price = float(df['BTC_Close'].iloc[-1])
@@ -255,7 +284,7 @@ def predict():
                       'MEDIUM' if confidence >= 0.55 else
                       'LOW')
 
-        # Safe regime calculation
+        # Safe regime
         if len(df) >= 20:
             ret_20 = (df['BTC_Close'].iloc[-1] /
                       df['BTC_Close'].iloc[-20] - 1)
@@ -271,15 +300,14 @@ def predict():
         except Exception:
             fear_greed = 50
 
-        # Safe price history
         history = df[['Date','BTC_Close']].tail(30).copy()
         history['Date'] = history['Date'].dt.strftime(
                               '%Y-%m-%d')
 
-        print(f"✅ Prediction done: ${cur_price:,.2f} "
+        print(f"✅ Prediction: ${cur_price:,.2f} "
               f"→ {direction} ({confidence*100:.1f}%)")
 
-        return jsonify({
+        result = {
             'success'       : True,
             'date'          : cur_date,
             'current_price' : round(cur_price, 2),
@@ -310,7 +338,11 @@ def predict():
                 'dates'  : history['Date'].tolist(),
                 'prices' : history['BTC_Close'].tolist(),
             },
-        })
+        }
+
+        # ✅ Cache result for 1 hour
+        set_cached(result)
+        return jsonify(result)
 
     except Exception as e:
         import traceback
