@@ -149,16 +149,29 @@ def fetch_btc():
     try:
         end   = datetime.now()
         start = end - timedelta(days=120)
-        btc   = yf.download(
-            'BTC-USD',
-            start=start.strftime('%Y-%m-%d'),
-            end=end.strftime('%Y-%m-%d'),
-            interval='1d',
-            progress=False,
-            auto_adjust=True
-        )
+
+        # ✅ Add retry logic for rate limiting
+        import time as time_module
+        for attempt in range(3):
+            try:
+                btc = yf.download(
+                    'BTC-USD',
+                    start=start.strftime('%Y-%m-%d'),
+                    end=end.strftime('%Y-%m-%d'),
+                    interval='1d',
+                    progress=False,
+                    auto_adjust=True
+                )
+                if not btc.empty:
+                    break
+                print(f"Attempt {attempt+1} returned empty, retrying...")
+                time_module.sleep(2)
+            except Exception as e:
+                print(f"Attempt {attempt+1} failed: {e}")
+                time_module.sleep(3)
+
         if btc.empty:
-            raise ValueError("yfinance returned empty BTC data")
+            raise ValueError("yfinance returned empty BTC data after 3 attempts")
 
         btc.columns = btc.columns.get_level_values(0)
         btc = btc[['Close','Volume']].copy()
@@ -170,6 +183,7 @@ def fetch_btc():
         print(f"✅ BTC rows: {len(btc)}, "
               f"last: {btc['Date'].iloc[-1].date()}")
         return btc
+
     except Exception as e:
         print(f"❌ fetch_btc failed: {e}")
         raise
@@ -226,14 +240,11 @@ def fetch_fear_greed():
 @predict_bp.route('/api/predict')
 def predict():
     try:
-        # ✅ Check cache using app-level cache
-        from flask import current_app
-        get_cached = current_app.get_cached_prediction
-        set_cached = current_app.set_cached_prediction
-
+        # ✅ Use module-level cache (no import needed)
         cached = get_cached()
         if cached:
             return jsonify(cached)
+        # ... rest unchanged
 
         models   = current_app.config['MODELS']
         config   = current_app.config['CONFIG']

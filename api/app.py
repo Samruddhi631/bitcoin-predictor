@@ -87,9 +87,6 @@ app.config['DATA_DIR'] = os.path.join(
     os.path.dirname(__file__), 'data')
 os.makedirs(app.config['DATA_DIR'], exist_ok=True)
 
-# Make cache functions available to routes
-app.get_cached_prediction = get_cached_prediction
-app.set_cached_prediction = set_cached_prediction
 
 # ── Endpoints ─────────────────────────────────────
 @app.route('/')
@@ -111,11 +108,12 @@ def health():
 
 @app.route('/api/warmup')
 def warmup():
-    # ✅ Simple endpoint — wakes server instantly
+    # Simple health check — no cache dependency
     return jsonify({
         'status' : 'warm',
         'ready'  : True,
-        'models' : all(v is not None for v in models.values())
+        'models' : all(v is not None
+                       for v in models.values())
     })
 
 if __name__ == '__main__':
