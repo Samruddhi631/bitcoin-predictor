@@ -36,10 +36,9 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "http://localhost:5173",    # React dev server
-            "http://localhost:3000",    # alternate
-            os.getenv("FRONTEND_URL",  # production URL
-                       "*")
+            "http://localhost:5173",
+            "https://bitcoin-predictor.vercel.app",  # ← add your Vercel URL
+            os.getenv("FRONTEND_URL", "*")
         ]
     }
 })
