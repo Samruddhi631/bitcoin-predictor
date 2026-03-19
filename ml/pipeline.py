@@ -12,10 +12,22 @@ import yfinance as yf
 from datetime import datetime, timedelta
 
 # ── Paths ─────────────────────────────────────────
+
 ROOT_DIR    = os.path.dirname(os.path.dirname(
                   os.path.abspath(__file__)))
 MODELS_DIR  = os.path.join(ROOT_DIR, 'api', 'models')
 DATA_DIR    = os.path.join(ROOT_DIR, 'api', 'data')
+
+# ✅ Check models exist before running
+if not os.path.exists(MODELS_DIR):
+    print(f"❌ Models directory not found: {MODELS_DIR}")
+    print("Available directories:")
+    for item in os.listdir(ROOT_DIR):
+        print(f"  {item}")
+    sys.exit(1)
+
+model_files = os.listdir(MODELS_DIR)
+print(f"✅ Found {len(model_files)} files in models/")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ── Load models ───────────────────────────────────
