@@ -226,7 +226,11 @@ def fetch_fear_greed():
 @predict_bp.route('/api/predict')
 def predict():
     try:
-        # ✅ Return cached result if fresh
+        # ✅ Check cache using app-level cache
+        from flask import current_app
+        get_cached = current_app.get_cached_prediction
+        set_cached = current_app.set_cached_prediction
+
         cached = get_cached()
         if cached:
             return jsonify(cached)
