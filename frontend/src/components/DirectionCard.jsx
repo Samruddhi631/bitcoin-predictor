@@ -1,8 +1,25 @@
 // src/components/DirectionCard.jsx
+function DirectionIcon({ isUp, color }) {
+  return (
+    <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {isUp ? (
+        <>
+          <path d="M26 8L26 36" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15 20L26 8L37 20" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      ) : (
+        <>
+          <path d="M26 44L26 16" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15 32L26 44L37 32" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      )}
+    </svg>
+  )
+}
+
 export default function DirectionCard({ direction, confidence, tier }) {
   const isUp    = direction === 'UP'
   const color   = isUp ? '#3fb950' : '#f85149'
-  const icon    = isUp ? '📈' : '📉'
   const label   = isUp ? 'BULLISH' : 'BEARISH'
 
   const tierColor = tier === 'HIGH'   ? '#3fb950' :
@@ -27,8 +44,8 @@ export default function DirectionCard({ direction, confidence, tier }) {
         Direction Signal
       </div>
 
-      <div style={{ fontSize: '52px', marginBottom: '8px' }}>
-        {icon}
+      <div style={{ marginBottom: '8px' }}>
+        <DirectionIcon isUp={isUp} color={color} />
       </div>
 
       <div style={{

@@ -13,9 +13,9 @@ const api = axios.create({
 export const wakeServer = async () => {
   try {
     await api.get('/api/warmup', { timeout: 30000 })
-    console.log('✅ Server warm')
+    console.log('[OK] Server warm')
   } catch (e) {
-    console.log('⏳ Server waking...')
+    console.log('[INFO] Server waking...')
   }
 }
 

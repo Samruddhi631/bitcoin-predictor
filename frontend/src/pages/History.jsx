@@ -3,6 +3,23 @@ import { useState, useEffect } from 'react'
 import { getHistory } from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 
+function StatusIcon({ isCorrect }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {isCorrect ? (
+        // Checkmark
+        <path d="M16 5.5L8.5 15L4 10" stroke="#3fb950" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        // X mark
+        <>
+          <path d="M5 15L15 5" stroke="#f85149" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15 15L5 5" stroke="#f85149" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+    </svg>
+  )
+}
+
 export default function History() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -190,13 +207,11 @@ export default function History() {
                         ? `$${Number(p.error_usd).toLocaleString()}`
                         : '—'}
                     </td>
-                    <td style={{ padding: '10px 16px' }}>
+                    <td style={{ padding: '10px 16px', display: 'flex', justifyContent: 'center' }}>
                       {p.direction_correct === 'pending' ||
                        p.direction_correct === null
                         ? <span style={{ color: '#8b949e' }}>—</span>
-                        : p.direction_correct == 1
-                          ? <span style={{ color: '#3fb950' }}>✅</span>
-                          : <span style={{ color: '#f85149' }}>❌</span>
+                        : <StatusIcon isCorrect={p.direction_correct == 1} />
                       }
                     </td>
                   </tr>

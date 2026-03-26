@@ -116,9 +116,9 @@ export default function Dashboard() {
         />
         <PriceCard
           label="Market Regime"
-          value={market.regime === 'Bull' ? '🐂 Bull'
-               : market.regime === 'Bear' ? '🐻 Bear'
-               : '↔️ Sideways'}
+          value={market.regime === 'Bull' ? ' Bull'
+               : market.regime === 'Bear' ? ' Bear'
+               : ' Sideways'}
           sub={`Fear & Greed: ${market.fear_greed}/100`}
         />
       </div>
