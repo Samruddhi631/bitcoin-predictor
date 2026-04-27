@@ -88,7 +88,7 @@ export default function History() {
       {data?.stats && Object.keys(data.stats).length > 0 && (
         <div style={{
           display:             'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap:                 '16px',
           marginBottom:        '24px',
         }}>
@@ -136,6 +136,7 @@ export default function History() {
           border:       '1px solid #30363d',
           borderRadius: '12px',
           overflow:     'hidden',
+          overflowX:    'auto',
         }}>
           <table style={{
             width:           '100%',

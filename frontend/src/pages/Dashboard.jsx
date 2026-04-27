@@ -98,7 +98,7 @@ export default function Dashboard() {
       {/* Row 1: 3 stat cards */}
       <div style={{
         display:             'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
         gap:                 '16px',
         marginBottom:        '16px',
       }}>
@@ -126,7 +126,7 @@ export default function Dashboard() {
       {/* Row 2: 4 metric cards */}
       <div style={{
         display:             'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap:                 '16px',
         marginBottom:        '16px',
       }}>
@@ -177,7 +177,7 @@ export default function Dashboard() {
       {/* Row 4: Direction + Targets */}
       <div style={{
         display:             'grid',
-        gridTemplateColumns: '1fr 1fr',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap:                 '16px',
         marginBottom:        '16px',
       }}>
@@ -248,7 +248,7 @@ export default function Dashboard() {
       {/* Row 5: Feature Importance + Model Info */}
       <div style={{
         display:             'grid',
-        gridTemplateColumns: '1fr 1fr',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap:                 '16px',
         marginBottom:        '16px',
       }}>
